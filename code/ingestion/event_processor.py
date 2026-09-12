@@ -1,4 +1,4 @@
- """
+"""
 ingestion/event_processor.py — Build a FinancialState for one (user, request).
 
 Pipeline (no LLM, no OCR):
