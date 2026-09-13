@@ -223,16 +223,23 @@ class PaymentSelector:
 
         # ---- D. Synthetic partial payment (no spending changes) --------------
         safe_amt = safety_result.amount_safe_to_pay
+        earliest = safety_result.earliest_full_payment_date
         if (
             "partial_payment" in accepted
             and request.allows_partial_payment
             and 0 < safe_amt < requested
+            and earliest is not None          # need earliest for the 2nd payment
         ):
-            plan, rank = PlanBuilder.partial_payment(safe_amt, req_date)
+            plan, rank = PlanBuilder.partial_payment(
+                safe_amount=safe_amt,
+                requested_amount=requested,
+                on_date=req_date,
+                earliest_date=earliest,
+            )
             candidates.append(_make_candidate(
                 plan=plan, rank=rank, spending_changes=[],
-                total_payable=safe_amt,
-                completes_by_deadline=False,
+                total_payable=requested,
+                completes_by_deadline=earliest <= deadline,
                 request_date=req_date,
             ))
 

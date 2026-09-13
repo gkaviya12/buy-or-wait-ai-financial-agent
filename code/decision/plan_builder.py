@@ -89,10 +89,23 @@ class PlanBuilder:
         return plan, 999_998
 
     @staticmethod
-    def partial_payment(amount: float, on_date: date) -> tuple[PaymentPlan, int]:
-        """Partial payment plan. Returns (plan, rank)."""
+    def partial_payment(
+        safe_amount: float,
+        requested_amount: float,
+        on_date: date,
+        earliest_date: date,
+    ) -> tuple[PaymentPlan, int]:
+        """
+        Partial payment plan — exactly two payments as required by the spec:
+          1. safe_amount on on_date (request_date)
+          2. remainder (requested_amount - safe_amount) on earliest_date
+
+        The two payments sum to requested_amount.
+        Returns (plan, rank).
+        """
+        remainder = round(requested_amount - safe_amount, 2)
         plan = PaymentPlan(
-            payments=[(on_date, amount)],
+            payments=[(on_date, safe_amount), (earliest_date, remainder)],
             method="partial_payment",
             option_id=None,
         )

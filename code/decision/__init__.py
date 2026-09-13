@@ -72,9 +72,16 @@ class DecisionEngine:
         else:
             changes_str = "none"
 
-        # Format earliest_date_for_full_payment
+        # Format earliest_date_for_full_payment per spec:
+        # - affordable_now → must equal request_date
+        # - otherwise      → computed value from safety_result (or "")
         earliest = safety_result.earliest_full_payment_date
-        earliest_str = earliest.isoformat() if earliest else ""
+        if best.affordability_status == "affordable_now":
+            earliest_str = request.request_date.isoformat()
+        elif earliest is not None:
+            earliest_str = earliest.isoformat()
+        else:
+            earliest_str = ""
 
         return DecisionResult(
             request_id=request.request_id,
