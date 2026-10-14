@@ -134,8 +134,13 @@ Reconstructing a user's true financial standing requires reconciling conflicting
 
 A point-in-time balance check is insufficient to prevent overdrafts. `code/forecasting/cash_flow.py` models a day-by-day discrete timeline over 90 calendar days ($d \in [0, 89]$ relative to `request_date`):
 
-$$\text{closing\_balance}[d] = \text{opening\_balance}[d] + \sum \text{credits}[d] - \sum \text{debits}[d]$$
-$$\text{opening\_balance}[d+1] = \text{closing\_balance}[d]$$
+$$
+\text{closing\_balance}[d] = \text{opening\_balance}[d] + \sum \text{credits}[d] - \sum \text{debits}[d]
+$$
+
+$$
+\text{opening\_balance}[d + 1] = \text{closing\_balance}[d]
+$$
 
 Starting from `profile.current_available_balance`, the simulation aggregates all confirmed scheduled transactions and synthetic recurring events occurring on each date. This provides an exact closing balance for every single day in the 90-day window.
 
@@ -145,14 +150,16 @@ The system must determine `amount_safe_to_pay`: the maximum single lump sum paya
 
 Because paying an amount $X$ on Day 0 permanently reduces all subsequent closing balances by $X$, the safety condition is monotone decreasing:
 
-$$\forall d \in [0, 89], \quad \text{closing\_balance}[d] - X \ge \text{minimum\_balance}$$
+$$
+\forall d \in [0, 89], \quad \text{closing\_balance}[d] - X \ge \text{minimum\_balance}
+$$
 
 In `code/forecasting/safety_check.py`, this is solved via binary search over the bounded interval $[0, \text{requested\_amount}]$:
 1. If paying $X = \text{requested\_amount}$ leaves all closing balances $\ge \text{minimum\_balance}$, return `requested_amount`.
-2. If paying $X = 0$ leaves any closing balance $< \text{minimum\_balance}$, return `0.0`.
-3. Otherwise, binary-search between $\text{lo} = 0.0$ and $\text{hi} = \text{requested\_amount}$ until $\text{hi} - \text{lo} < 0.01$, returning $\text{round}(\text{lo}, 2)$.
+2. If paying $X = 0$ leaves any closing balance $\lt \text{minimum\_balance}$, return `0.0`.
+3. Otherwise, binary-search between $\text{lo} = 0.0$ and $\text{hi} = \text{requested\_amount}$ until $\text{hi} - \text{lo} \lt 0.01$, returning `round(lo, 2)`.
 
-**Why Binary Search?** While a single lump-sum payment on Day 0 can analytically be solved as $\min(\text{closing}) - \text{minimum}$, the binary search formulation cleanly generalizes to the predicate `is_payment_schedule_safe()`. This allows the same underlying engine to validate arbitrary multi-date installment schedules and partial payment combinations.
+**Why Binary Search?** While a single lump-sum payment on Day 0 can analytically be solved as $\min(\text{closing\_balance}) - \text{minimum\_balance}$, the binary search formulation cleanly generalizes to the predicate `is_payment_schedule_safe()`. This allows the same underlying engine to validate arbitrary multi-date installment schedules and partial payment combinations.
 
 ### 5.4 Suffix-Minimum Scan for Earliest Full-Payment Date
 
@@ -160,11 +167,15 @@ To determine when a user who cannot afford an expense today will be able to pay 
 
 Paying amount $X$ on day $i$ only affects balances from day $i$ onwards. To find the earliest safe date in $O(n)$ time without re-running a 90-day simulation for each day, the engine computes a suffix-minimum array:
 
-$$\text{suffix\_min}[i] = \min_{k=i}^{89} \left( \text{closing\_balance}[k] \right)$$
+$$
+\text{suffix\_min}[i] = \min_{k=i}^{89} \left( \text{closing\_balance}[k] \right)
+$$
 
 A full payment of $X$ on day $i$ is safe if and only if:
 
-$$\text{suffix\_min}[i] - \text{minimum\_balance} \ge X$$
+$$
+\text{suffix\_min}[i] - \text{minimum\_balance} \ge X
+$$
 
 The algorithm computes `suffix_min` in a single backward pass ($O(n)$), then scans forward from day 0 to 89 ($O(n)$). The first index $i$ satisfying the condition yields `earliest_date_for_full_payment`. If no such day exists within 90 days, the value is left empty.
 
@@ -205,13 +216,13 @@ To prevent corrupt or invalid rows from reaching `output.csv`, `code/validation/
 | **R3** | `affordability_status` $\in$ allowed enum set | Fallback `not_recommended` row |
 | **R4** | `recommended_payment_method` $\in$ allowed enum set | Fallback `not_recommended` row |
 | **R5** | `payment_plan` is `"none"` for `not_recommended`, non-empty otherwise | Fallback `not_recommended` row |
-| **R6** | Each plan segment matches `YYYY-MM-DD:AMOUNT` with $\text{AMOUNT} > 0$ | Fallback `not_recommended` row |
+| **R6** | Each plan segment matches `YYYY-MM-DD:AMOUNT` with $\text{AMOUNT} \gt 0$ | Fallback `not_recommended` row |
 | **R7** | `earliest_date_for_full_payment` is valid ISO date or empty | Fallback `not_recommended` row |
 | **R8** | `spending_changes_needed` syntax: `none`, `stop:<id>`, `reduce_to:<id>:<amt>` ($\le 3$ items) | Fallback `not_recommended` row |
 | **R9** | `decision_explanation` is a non-empty string | Fallback `not_recommended` row |
 | **R10** | Status-to-method consistency (`affordable_now` $\leftrightarrow$ `full_payment`, `affordable_later` $\leftrightarrow$ `wait`, `not_affordable` $\leftrightarrow$ `not_recommended`, `partial_payment` $\leftrightarrow$ `affordable_with_plan`) | Fallback `not_recommended` row |
 | **R11** | For `affordable_now`, `earliest_date_for_full_payment` == `request_date` | Fallback `not_recommended` row |
-| **R12** | For `partial_payment`, plan has exactly 2 payments summing to `requested_amount` ($|\Delta| \le 0.02$) | Fallback `not_recommended` row |
+| **R12** | For `partial_payment`, plan has exactly 2 payments summing to `requested_amount` ($\lvert \Delta \rvert \le 0.02$) | Fallback `not_recommended` row |
 | **R13** | For `not_recommended`, `amount_safe_to_pay` must equal 0.0 | Fallback `not_recommended` row |
 
 If any check fails, the validator intercepts the error, logs a warning, and substitutes a safe, compliant fallback record.
